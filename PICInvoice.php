@@ -121,28 +121,30 @@ while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
     // Increment row number
     $rowNumber++;
             // Track the occurrence of the InvoiceID
-            $invoiceId = $row['InvoiceID'];
-            if (!isset($invoiceIdCounts[$invoiceId])) {
-                $invoiceIdCounts[$invoiceId] = 0;
-            }
-            $invoiceIdCounts[$invoiceId]++;
+            // $invoiceId = $row['InvoiceID'];
+            // if (!isset($invoiceIdCounts[$invoiceId])) {
+            //     $invoiceIdCounts[$invoiceId] = 0;
+            // }
+            // $invoiceIdCounts[$invoiceId]++;
             
-            $count = $invoiceIdCounts[$invoiceId];
-            $suffix = '';
-            if ($count > 100) {
-                // Calculate suffix dynamically
-                $suffixIndex = ceil($count / 100) - 1;
-                $suffix = '-' . $suffixIndex;
-            }
+            // $count = $invoiceIdCounts[$invoiceId];
+            // $suffix = '';
+            // if ($count > 100) {
+            //     // Calculate suffix dynamically
+            //     $suffixIndex = ceil($count / 100) - 1;
+            //     $suffix = '-' . $suffixIndex;
+            // }
         
-            // Append suffix to InvoiceID if needed
-            $modifiedInvoiceId = $invoiceId . $suffix;
+            // // Append suffix to InvoiceID if needed
+            // $modifiedInvoiceId = $invoiceId . $suffix;
 
     // Set values in specific CSV columns
     $sheet->setCellValue('A' . $rowNumber, $row['DocumentType']);
-    $sheet->setCellValue('B' . $rowNumber, $modifiedInvoiceId);
+    $sheet->setCellValue('B' . $rowNumber, $row['InvoiceID']);
     $sheet->setCellValue('C' . $rowNumber, $row['DocumentDate']);
     $sheet->setCellValue('D' . $rowNumber, $row['VendorCode']);
+    $sheet->setCellValue('E' . $rowNumber, 'EI00000000030');  
+    $sheet->setCellValue('F' . $rowNumber, 'NA');
     $sheet->setCellValue('K' . $rowNumber, $row['VendorRegName']);
     $sheet->setCellValue('M' . $rowNumber, $row['VendorAddress1']);
     $sheet->setCellValue('N' . $rowNumber, $row['VendorAddress2']);

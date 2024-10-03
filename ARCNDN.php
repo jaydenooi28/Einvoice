@@ -16,46 +16,57 @@ $sheet = $spreadsheet->getActiveSheet();
 
 
 $sql = "
-WITH Address AS (
-  SELECT 
-    D.t_bpid AS BP, 
-    t_ln01 AS RegName, 
-    A.t_cadr AS AdCode, 
-    A.t_dsca AS City, 
-    A.t_ccty AS Country, 
-    D.t_telp AS Tel, 
-    t_ln02 + ', ' AS Add1, 
-    t_ln03 AS Add2, 
-    t_ln04 + t_ln05  AS Add3 
-	,A.t_nama as OTname
-  FROM 
-    erp.dbo.ttccom130800 A WITH (NOLOCK) 
-    LEFT JOIN erp.dbo.ttccom100800 D WITH (NOLOCK) ON D.t_cadr = A.t_cadr 
-	where D.t_prst = 2
+WITH RankedRecords AS (
+  SELECT *,  
+         ROW_NUMBER() OVER (PARTITION BY t_bpid ORDER BY t_exdt DESC) AS rank
+  FROM erp.dbo.ttctax400800 b WITH (NOLOCK)
 
-), oneTime AS(
+),
+Address AS (
+SELECT 
+  D.t_bpid AS BP, 
+b.t_fovn as TIN,
+D.t_beid as BRN,
+  D.t_nama AS RegName, 
+  A.t_cadr AS AdCode, 
+  A.t_dsca AS City, 
+ A.t_ccty AS Country, 
+  D.t_telp AS Tel, 
+  t_ln02  AS Add1, 
+  t_ln03 AS Add2, 
+  t_ln04 + t_ln05 AS Add3 
+,A.t_nama as OTname
+FROM 
+  erp.dbo.ttccom130800 A WITH (NOLOCK) 
+  LEFT JOIN erp.dbo.ttccom100800 D WITH (NOLOCK) ON D.t_cadr = A.t_cadr 
+left join RankedRecords b on D.t_bpid = b.t_bpid and rank =1
+		where D.t_prst = 2
+), OneTime AS(
 		select 
-		t_cadr as AdCode,t_ln01 as OTname, t_dsca  as City,t_ccty as Country,t_telp AS Tel, 
-		       t_ln02 + ', ' AS Add1
-		, t_ln03  as Add2, 
+		t_cadr as AdCode,t_ln01 as OTname, t_dsca  as City,t_ccty as Country,t_telp as Tel,
+		       t_ln02  AS Add1
+		,t_ln03  as Add2, 
 		t_ln04+t_ln05  AS Add3
 		from  erp.dbo.ttccom130800  WITH (NOLOCK) 
 		
 ),
 InvoiceInfo AS (
   SELECT 
-  'ARCNDN' AS DocumentType,
-  case when  A.t_tran IN ('SCN','S10') then 'Credit Note' else 'Debit Note' end as Type,
-    '800/' + CONVERT(VARCHAR(50), A.t_tran) + '/' + CONVERT(VARCHAR(50), A.t_idoc) AS InvoiceID, 
-      FORMAT(DATEADD(HOUR, 8, A.t_idat), 'MM/dd/yyyy HH:mm:ss') AS DocumentDate, 
+    'SInvoice' AS DocumentType, 
+    '800' + '/' + CONVERT(VARCHAR(50), A.t_tran) + '/' + CONVERT(VARCHAR(50), A.t_idoc) AS InvoiceID, 
+    FORMAT(DATEADD(HOUR, 8, A.t_idat), 'MM/dd/yyyy HH:mm:ss') AS DocumentDate, 
     A.t_itbp AS CusCode, 
-       case when A.t_itbp= 'OT0000001' then oneTime.OTname else  CUS.RegName end AS CusRegName,
-    case when A.t_itbp= 'OT0000001' then oneTime.Add1 else   CUS.Add1 end AS CusAddress1,
-    case when A.t_itbp= 'OT0000001' then oneTime.Add2 else  CUS.Add2 end AS CusAddress2,
-     case when A.t_itbp= 'OT0000001' then oneTime.Add3 else CUS.Add3 end AS CusAddress3,
-    case when A.t_itbp= 'OT0000001' then oneTime.Country else CUS.Country end AS Country, 
-		 case when A.t_itbp= 'OT0000001' then oneTime.City else CUS.City end AS City, 
-	 	 case when A.t_itbp= 'OT0000001' then oneTime.Tel else CUS.Tel end AS Tel, 
+    	 	  case when A.t_itbp= 'OT0000001' then 'EI00000000010'
+	   when CUS.Country != 'MYS' then 'EI00000000010'
+	  else  CUS.TIN end AS TIN,
+	    case when A.t_itbp= 'OT0000001' then 'NA' else  CUS.BRN end AS BRN,
+       case when A.t_itbp= 'OT0000001' then OneTime.OTname else  CUS.RegName end AS CusRegName,
+    case when A.t_itbp= 'OT0000001' then OneTime.Add1 else   CUS.Add1 end AS CusAddress1,
+    case when A.t_itbp= 'OT0000001' then OneTime.Add2 else  CUS.Add2 end AS CusAddress2,
+     case when A.t_itbp= 'OT0000001' then OneTime.Add3 else CUS.Add3 end AS CusAddress3,
+    case when A.t_itbp= 'OT0000001' then OneTime.Country else CUS.Country end AS Country, 
+		 case when A.t_itbp= 'OT0000001' then OneTime.City else CUS.City end AS City, 
+	 	 case when A.t_itbp= 'OT0000001' then OneTime.Tel else CUS.Tel end AS Tel, 
     A.t_ccur AS Currency, 
     A.t_rate_1 AS CurrencyRate, 
     F.t_orno  AS SoRef, 
@@ -74,15 +85,15 @@ InvoiceInfo AS (
     0 AS TaxAmount, 
     0 AS TaxPrice, 
     D.t_amti AS ItemAmt, 
-    	D.t_amti *A.t_rate_1 as AmtInMyr,
+    	D.t_amth_1 as AmtInMyr,
 	case when B.t_slsf ='' then J.t_cuni else D.t_cuqs end as OrderUOM,
 	--case when A.t_tran = 'S10' ,
     
-	   case when A.t_itbp= 'OT0000001' then oneTime.OTname else   Ship.RegName  end AS ShipReceiptName,
-      case when A.t_itbp= 'OT0000001' then oneTime.Add1 else Ship.Add1 end AS ShipAddress1, 
-     case when A.t_itbp= 'OT0000001' then oneTime.Add2 else Ship.Add2 end AS ShipAddress2, 
-    case when A.t_itbp= 'OT0000001' then oneTime.Add3 else  Ship.Add3 end AS ShipAddress3, 
-     case when A.t_itbp= 'OT0000001' then oneTime.Country else  Ship.Country end AS ShipCountry
+	   case when A.t_itbp= 'OT0000001' then OneTime.OTname else   Ship.RegName  end AS ShipReceiptName,
+      case when A.t_itbp= 'OT0000001' then OneTime.Add1 else Ship.Add1 end AS ShipAddress1, 
+     case when A.t_itbp= 'OT0000001' then OneTime.Add2 else Ship.Add2 end AS ShipAddress2, 
+    case when A.t_itbp= 'OT0000001' then OneTime.Add3 else  Ship.Add3 end AS ShipAddress3, 
+     case when A.t_itbp= 'OT0000001' then OneTime.Country else  Ship.Country end AS ShipCountry
       ,(DATEADD(HOUR, 8, A.t_idat)) as ddd
     ,case when A.t_tran = 'S10' then F.t_corp else H.t_msid end as EInvRefNo,B.t_slsf 
   FROM 
@@ -97,7 +108,7 @@ InvoiceInfo AS (
 	
     LEFT join erp.dbo.tcisli220800 H WITH (NOLOCK) on A.t_msid = H.t_msid
 	LEFT join erp.dbo.tcisli225800 J WITH (NOLOCK) on A.t_msid = J.t_msid and J.t_msln = D.t_pono 
-	left join oneTime on  oneTime.AdCode = A.t_itoa
+	left join OneTime on  OneTime.AdCode = A.t_itoa
 	left  join erp.dbo.ttcmcs013800 I WITH (NOLOCK) on I.t_cpay = A.t_cpay 
     WHERE A.t_tran IN ('SCN', 'SDN','S10') 
 	--and DATEPART(YEAR,(DATEADD(HOUR, 8, A.t_idat))) = 2024 AND DATEPART(MONTH,(DATEADD(HOUR, 8, A.t_idat))) = 8
@@ -163,6 +174,12 @@ $sheet->setCellValue('B' . $rowNumber, $row['Type']);
 $sheet->setCellValue('C' . $rowNumber, $row['InvoiceID']);  // New column
 $sheet->setCellValue('D' . $rowNumber, $row['DocumentDate']);
 $sheet->setCellValue('E' . $rowNumber, $row['CusCode']);
+if (empty($row['TIN'])) {
+  die("Error: " . $row['CusCode'] . " (" . $row['CusRegName'] . ") has empty TIN");
+} else {
+  $sheet->setCellValue('F' . $rowNumber, $row['TIN']);
+}
+$sheet->setCellValue('G' . $rowNumber, $row['BRN']);
 $sheet->setCellValue('L' . $rowNumber, $row['CusRegName']);
 $sheet->setCellValue('N' . $rowNumber, $row['CusAddress1']);
 $sheet->setCellValue('O' . $rowNumber, $row['CusAddress2']);
@@ -221,7 +238,7 @@ $location = 'F';
 
 $outputFolder = 'ARCNDN';
 
-if ($location ==='F'){
+if ($location ==='L'){
 // Upload the file to FTP
  uploadToFtp($isLive,$memoryStream, $outputFolder);
 }else{

@@ -102,6 +102,7 @@ select
     Ship.Country AS ShipCountry
       ,(DATEADD(HOUR, 8, a.t_docd)) as ddd
 	  , c.t_cuni as OrderUOM
+      , b.t_amth_1 as [ItemAmt(MYR)]
 
 
 from erp.dbo.ttfacp200800 a WITH (NOLOCK) 
@@ -177,6 +178,7 @@ AdditionalCost AS (
     Ship.Add3 AS ShipAddress3, 
     Ship.Country AS ShipCountry
       ,(DATEADD(HOUR, 8, a.t_docd)) as ddd,'pcs' as OrderUOM
+      , k.t_amth_1 as [ItemAmt(MYR)]
 from erp.dbo.ttfacp101800 k WITH (NOLOCK) 
 inner join erp.dbo.ttfacp200800 a WITH (NOLOCK) on a.t_ninv = k.t_idoc and k.t_ityp = a.t_ttyp and k.t_ityp = 'PIN' and k.t_loco = 0
 left join Address Vendor on Vendor.BP = a.t_ifbp
@@ -240,6 +242,8 @@ while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
     $sheet->setCellValue('B' . $rowNumber, $row['InvoiceID']);
     $sheet->setCellValue('C' . $rowNumber, $row['DocumentDate']);
     $sheet->setCellValue('D' . $rowNumber, $row['VendorCode']);
+    $sheet->setCellValue('E' . $rowNumber, 'EI00000000030');  
+    $sheet->setCellValue('F' . $rowNumber, 'NA'); 
     $sheet->setCellValue('K' . $rowNumber, $row['VendorRegName']);
     $sheet->setCellValue('M' . $rowNumber, $row['VendorAddress1']);
     $sheet->setCellValue('N' . $rowNumber, $row['VendorAddress2']);
@@ -268,6 +272,7 @@ while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
     $sheet->setCellValue('AT' . $rowNumber, $row['ShipAddress2']);
     $sheet->setCellValue('AU' . $rowNumber, $row['ShipAddress3']);
     $sheet->setCellValue('BB' . $rowNumber, $row['ShipCountry']);
+    $sheet->setCellValue('BK' . $rowNumber, $row['ItemAmt(MYR)']);
 
     $city = $row['City'];
     $stateCode = getStateCode($city);

@@ -21,22 +21,31 @@ $sheet = $spreadsheet->getActiveSheet();
 
 
 $sql = "
-WITH Address AS (
-  SELECT 
-    D.t_bpid AS BP, 
 
-    t_ln01 AS RegName, 
-    A.t_cadr AS AdCode, 
-    A.t_dsca AS City, 
-   A.t_ccty AS Country, 
-    D.t_telp AS Tel, 
-    t_ln02  AS Add1, 
-    t_ln03 AS Add2, 
-    t_ln04 + t_ln05 AS Add3 
-	,A.t_nama as OTname
-  FROM 
-    erp.dbo.ttccom130800 A WITH (NOLOCK) 
-    LEFT JOIN erp.dbo.ttccom100800 D WITH (NOLOCK) ON D.t_cadr = A.t_cadr 
+WITH RankedRecords AS (
+  SELECT *,  
+         ROW_NUMBER() OVER (PARTITION BY t_bpid ORDER BY t_exdt DESC) AS rank
+  FROM erp.dbo.ttctax400800 b WITH (NOLOCK)
+
+),
+Address AS (
+SELECT 
+  D.t_bpid AS BP, 
+b.t_fovn as TIN,
+D.t_beid as BRN,
+  D.t_nama AS RegName, 
+  A.t_cadr AS AdCode, 
+  A.t_dsca AS City, 
+ A.t_ccty AS Country, 
+  D.t_telp AS Tel, 
+  t_ln02  AS Add1, 
+  t_ln03 AS Add2, 
+  t_ln04 + t_ln05 AS Add3 
+,A.t_nama as OTname
+FROM 
+  erp.dbo.ttccom130800 A WITH (NOLOCK) 
+  LEFT JOIN erp.dbo.ttccom100800 D WITH (NOLOCK) ON D.t_cadr = A.t_cadr 
+left join RankedRecords b on D.t_bpid = b.t_bpid and rank =1
 		where D.t_prst = 2
 ), OneTime AS(
 		select 
@@ -53,6 +62,10 @@ InvoiceInfo AS (
     '800' + '/' + CONVERT(VARCHAR(50), A.t_tran) + '/' + CONVERT(VARCHAR(50), A.t_idoc) AS InvoiceID, 
     FORMAT(DATEADD(HOUR, 8, A.t_idat), 'MM/dd/yyyy HH:mm:ss') AS DocumentDate, 
     A.t_itbp AS CusCode, 
+    	 	  case when A.t_itbp= 'OT0000001' then 'EI00000000010'
+	   when CUS.Country != 'MYS' then 'EI00000000010'
+	  else  CUS.TIN end AS TIN,
+	    case when A.t_itbp= 'OT0000001' then 'NA' else  CUS.BRN end AS BRN,
        case when A.t_itbp= 'OT0000001' then OneTime.OTname else  CUS.RegName end AS CusRegName,
     case when A.t_itbp= 'OT0000001' then OneTime.Add1 else   CUS.Add1 end AS CusAddress1,
     case when A.t_itbp= 'OT0000001' then OneTime.Add2 else  CUS.Add2 end AS CusAddress2,
@@ -86,7 +99,7 @@ InvoiceInfo AS (
      case when A.t_itbp= 'OT0000001' then OneTime.Country else  Ship.Country end AS ShipCountry
     ,(DATEADD(HOUR, 8, A.t_idat)) as ddd
 	--,LTRIM(RTRIM(SUBSTRING(CAST(tt.t_text AS CHAR(25)), 9, 12))) AS CustomForm1
-	,D.t_amti *A.t_rate_1 as AmtInMyr
+	,D.t_amth_1 as AmtInMyr
 
 
   FROM 
@@ -106,7 +119,7 @@ InvoiceInfo AS (
 	--left join erp.dbo.ttttxt010800 tt with (NOLOCK) on tt.t_ctxt = DO.t_text
 	left join OneTime on  OneTime.AdCode = A.t_itoa
       WHERE A.t_tran  IN ('S01', 'S02')	and A.t_stat = 6 
-      --and A.t_idoc not in (25001781,25001795)
+      and A.t_idoc not in (25000067)
 
 	) 
   Select * from InvoiceInfo
@@ -190,6 +203,12 @@ while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
     $sheet->setCellValue('B' . $rowNumber, $row['InvoiceID']);
     $sheet->setCellValue('C' . $rowNumber, $row['DocumentDate']);
     $sheet->setCellValue('D' . $rowNumber, $row['CusCode']);
+    if (empty($row['TIN'])) {
+      die("Error: " . $row['CusCode'] . " (" . $row['CusRegName'] . ") has empty TIN");
+  } else {
+      $sheet->setCellValue('E' . $rowNumber, $row['TIN']);
+  }
+    $sheet->setCellValue('F' . $rowNumber, $row['BRN']);
     $sheet->setCellValue('K' . $rowNumber, $row['CusRegName']);
     $sheet->setCellValue('M' . $rowNumber, $row['CusAddress1']);
     $sheet->setCellValue('N' . $rowNumber, $row['CusAddress2']);
@@ -247,7 +266,7 @@ $location = 'F';
 
 $outputFolder = 'Invoice';
 
-if ($location ==='F'){
+if ($location ==='L'){
 // Upload the file to FTP
  uploadToFtp($isLive,$memoryStream, $outputFolder);
 }else{
